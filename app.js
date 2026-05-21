@@ -639,7 +639,7 @@ function openFigures(side) {
             let imgHTML = '';
             if (fig.images && fig.images.length > 0) {
                 imgHTML = `
-                    <div class="figure-slideshow">
+                    <div class="figure-image-slideshow">
                         ${fig.images.map((img, i) => `<img src="${img}" class="figure-slide ${i === 0 ? 'active' : ''}" alt="${fig.name}">`).join('')}
                     </div>
                 `;
@@ -1236,4 +1236,654 @@ function openTheatreEventModal(categoryTitle, eventIdx) {
 
 function closeTheatreEventModal() {
     document.getElementById('theatre-event-modal').classList.add('hidden');
-}
+    document.body.style.overflow = 'auto';
+}
+
+// =============================================================
+//  VISITOR SESSION — localStorage persistence
+// =============================================================
+const VISITOR_KEY = 'ww_history_visitor';
+let visitorSession = null;
+
+function loadVisitorSession() {
+    try {
+        const raw = localStorage.getItem(VISITOR_KEY);
+        if (raw) {
+            const data = JSON.parse(raw);
+            visitorSession = {
+                name: data.name || 'Explorer',
+                age: data.age || 14,
+                exploredEvents: new Set(data.exploredEvents || []),
+                quizHighScore: data.quizHighScore || 0
+            };
+            return true; // returning visitor
+        }
+    } catch(e) { /* ignore */ }
+    return false;
+}
+
+function saveVisitorSession() {
+    if (!visitorSession) return;
+    try {
+        localStorage.setItem(VISITOR_KEY, JSON.stringify({
+            name: visitorSession.name,
+            age: visitorSession.age,
+            exploredEvents: Array.from(visitorSession.exploredEvents),
+            quizHighScore: visitorSession.quizHighScore
+        }));
+    } catch(e) { /* ignore */ }
+}
+
+// Intercept onboarding submission to also create a session
+const _origSubmitVisitor = window.submitVisitor;
+window.submitVisitor = function() {
+    const name = document.getElementById('visitor-name').value.trim();
+    const ageVal = document.getElementById('visitor-age').value.trim();
+    if (!name || !ageVal) { alert('Please enter both your name and age to proceed.'); return; }
+    const age = parseInt(ageVal, 10);
+    if (isNaN(age) || age < 1) { alert('Please enter a valid age.'); return; }
+    if (age < 14) {
+        document.getElementById('visitor-form-screen').classList.add('hidden');
+        document.getElementById('denied-visitor-name').innerText = name;
+        document.getElementById('access-denied-screen').classList.remove('hidden');
+        return;
+    }
+    visitorSession = { name, age, exploredEvents: new Set(), quizHighScore: 0 };
+    saveVisitorSession();
+    document.getElementById('onboarding-overlay').style.display = 'none';
+    alert(`Welcome, ${name}. This page welcomes you to learn about history.`);
+};
+
+function initVisitorBadge() {
+    if (!visitorSession) return;
+    const badgeName = document.getElementById('badge-visitor-name');
+    if (badgeName) badgeName.textContent = visitorSession.name;
+    updateProgressRing();
+}
+
+// =============================================================
+//  PROGRESS ENGINE — tracks every opened modal
+// =============================================================
+function getExploreableEventIds(warKey) {
+    const ids = new Set();
+    const data = warData[warKey];
+    if (!data) return ids;
+
+    // 1. Causes
+    if (data.causes) {
+        data.causes.forEach(cause => {
+            ids.add('modal_' + cause.title.replace(/\s+/g, '_').toLowerCase().slice(0, 40));
+        });
+    }
+
+    // 2. Figures
+    if (data.alliancesSplit) {
+        Object.keys(data.alliancesSplit).forEach(side => {
+            const sideData = data.alliancesSplit[side];
+            if (sideData && sideData.figures) {
+                sideData.figures.forEach(fig => {
+                    ids.add('modal_' + fig.name.replace(/\s+/g, '_').toLowerCase().slice(0, 40));
+                });
+            }
+        });
+    }
+
+    // 3. WWI Timeline (only WWI has direct timeline modals)
+    if (warKey === 'ww1' && data.timeline) {
+        data.timeline.forEach(event => {
+            ids.add('modal_' + (event.extendedTitle || event.year).replace(/\s+/g, '_').toLowerCase().slice(0, 40));
+        });
+    }
+
+    // 4. WWII Theatre Events (only WWII has theatre events)
+    if (warKey === 'ww2') {
+        const theatres = ['europe', 'pacific'];
+        theatres.forEach(tKey => {
+            const theatre = ww2DetailedTheatres[tKey];
+            if (theatre) {
+                ['military', 'atrocities'].forEach(tabKey => {
+                    const categories = theatre[tabKey];
+                    if (categories) {
+                        categories.forEach(cat => {
+                            if (cat.events) {
+                                cat.events.forEach(event => {
+                                    ids.add('theatre_' + tKey + '_' + tabKey + '_' + event.title.replace(/\s+/g, '_').toLowerCase().slice(0, 40));
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    return ids;
+}
+
+function trackEventOpen(eventId) {
+    if (!visitorSession) return;
+    visitorSession.exploredEvents.add(eventId);
+    saveVisitorSession();
+    updateProgressRing();
+}
+
+function updateProgressRing() {
+    const fill = document.getElementById('progress-ring-fill');
+    const pctEl = document.getElementById('progress-ring-pct');
+    const rankEl = document.getElementById('badge-rank');
+    if (!fill || !pctEl || !visitorSession) return;
+
+    const currentWarKey = window.currentWar || 'ww1';
+    const totalIds = getExploreableEventIds(currentWarKey);
+    const total = totalIds.size || 14;
+    
+    let exploredCount = 0;
+    visitorSession.exploredEvents.forEach(id => {
+        if (totalIds.has(id)) {
+            exploredCount++;
+        }
+    });
+
+    const pct = Math.min(Math.round((exploredCount / total) * 100), 100);
+
+    const circumference = 113.1;
+    const offset = circumference - (pct / 100) * circumference;
+    fill.style.strokeDashoffset = offset;
+    pctEl.textContent = pct + '%';
+
+    // Assign a rank based on progress
+    let rank = 'Recruit';
+    if (pct >= 90) rank = 'Supreme Commander';
+    else if (pct >= 70) rank = 'Field Marshal';
+    else if (pct >= 50) rank = 'General';
+    else if (pct >= 30) rank = 'Sergeant';
+    else if (pct >= 10) rank = 'Private';
+    if (rankEl) rankEl.textContent = rank;
+}
+
+// Patch openMainModal to track exploration
+const _origOpenMainModal = openMainModal;
+openMainModal = function(title, body, images, imgFallback) {
+    trackEventOpen('modal_' + title.replace(/\s+/g, '_').toLowerCase().slice(0, 40));
+    _origOpenMainModal(title, body, images, imgFallback);
+};
+
+// Patch openTheatreEventModal to track exploration using unique title-based slugs
+const _origOpenTheatreEventModal = openTheatreEventModal;
+openTheatreEventModal = function(categoryTitle, eventIdx) {
+    const data = ww2DetailedTheatres[currentTheatreKey][currentTheatreTab];
+    if (data) {
+        const category = data.find(c => c.category === categoryTitle);
+        if (category && category.events && category.events[eventIdx]) {
+            const event = category.events[eventIdx];
+            const eventUniqueId = 'theatre_' + currentTheatreKey + '_' + currentTheatreTab + '_' + event.title.replace(/\s+/g, '_').toLowerCase().slice(0, 40);
+            trackEventOpen(eventUniqueId);
+        }
+    }
+    _origOpenTheatreEventModal(categoryTitle, eventIdx);
+};
+
+// Reinitialise badge whenever a war is selected
+const _origSelectWar = selectWar;
+selectWar = function(warKey) {
+    _origSelectWar(warKey);
+    setTimeout(initVisitorBadge, 50);
+};
+
+// =============================================================
+//  QUIZ DATA BANK
+// =============================================================
+const quizBank = {
+    ww1: [
+        { q: "Which nation's heir was assassinated, triggering WWI?", opts: ["Germany", "Austria-Hungary", "Serbia", "France"], a: 1, explain: "Archduke Franz Ferdinand of Austria-Hungary was assassinated in Sarajevo on June 28, 1914, triggering the July Crisis." },
+        { q: "What term describes the military build-up and arms race that preceded WWI?", opts: ["Nationalism", "Imperialism", "Militarism", "Fascism"], a: 2, explain: "Militarism — the rapid expansion of armies and navies — created an atmosphere where war was seen as inevitable." },
+        { q: "Which battle is famously remembered as one of the bloodiest in history, with over 1 million casualties?", opts: ["Battle of Verdun", "Battle of the Somme", "Battle of the Marne", "Gallipoli"], a: 1, explain: "The Battle of the Somme in 1916 resulted in over one million casualties on both sides." },
+        { q: "In what year did the United States officially enter WWI?", opts: ["1914", "1915", "1916", "1917"], a: 3, explain: "The U.S. entered the war in April 1917, partly due to the Zimmermann Telegram and unrestricted submarine warfare." },
+        { q: "Which ship was sunk by Germany, turning global opinion against them?", opts: ["USS Maine", "RMS Titanic", "RMS Lusitania", "HMS Dreadnought"], a: 2, explain: "A German submarine sank the British passenger liner RMS Lusitania in 1915, killing 1,198 people." },
+        { q: "What name describes the type of trench warfare tactic used by Germany in 1918?", opts: ["Blitzkrieg", "Spring Offensive", "Schlieffen Plan", "Total War"], a: 1, explain: "Germany's Spring Offensive of 1918 was its last major attempt to break the Allied lines before the US troops became fully effective." },
+        { q: "Which treaty formally ended WWI?", opts: ["Treaty of Brest-Litovsk", "Treaty of Versailles", "Treaty of Paris", "Treaty of London"], a: 1, explain: "The Treaty of Versailles, signed on June 28, 1919, officially ended WWI and imposed heavy penalties on Germany." },
+        { q: "WWI introduced a terrifying new weapon to mass warfare. Which was first used at the Second Battle of Ypres?", opts: ["Tanks", "Poison Gas", "Submarine", "Airplane"], a: 1, explain: "Germany first deployed chlorine gas at Ypres in April 1915 — a shocking and deadly escalation in modern warfare." },
+        { q: "Which British naval operation attempted to knock the Ottoman Empire out of the war?", opts: ["Battle of Jutland", "Gallipoli Campaign", "Zeebrugge Raid", "Operation Dynamo"], a: 1, explain: "The Gallipoli Campaign (1915–1916) was a failed Allied attempt to control the Dardanelles strait and capture Constantinople." },
+        { q: "The 'Zimmermann Telegram' was a secret proposal from Germany to which country?", opts: ["France", "Mexico", "Austria", "Bulgaria"], a: 1, explain: "Germany proposed that Mexico attack the United States in exchange for territory, helping push the U.S. into WWI." }
+    ],
+    ww2: [
+        { q: "What was the codename for the Allied amphibious invasion of Normandy on June 6, 1944?", opts: ["Operation Barbarossa", "Operation Sea Lion", "Operation Overlord", "Operation Dynamo"], a: 2, explain: "Operation Overlord (D-Day) was the largest amphibious invasion in history, opening the Western Front in Europe." },
+        { q: "Which city's invasion officially started WWII in Europe?", opts: ["France", "Poland", "Belgium", "Denmark"], a: 1, explain: "Germany invaded Poland on September 1, 1939, leading Britain and France to declare war two days later." },
+        { q: "What was Germany's rapid mobile warfare strategy called?", opts: ["Attrition", "Blitzkrieg", "Guerrilla warfare", "Siege warfare"], a: 1, explain: "Blitzkrieg ('Lightning War') combined fast tank movements, motorized infantry, and air support to overwhelm defenses." },
+        { q: "Which battle is considered the turning point of the Eastern Front in WWII?", opts: ["Battle of Kursk", "Battle of Moscow", "Battle of Stalingrad", "Siege of Leningrad"], a: 2, explain: "The Battle of Stalingrad (1942–1943) ended with Germany's 6th Army encircled and destroyed — the war's pivotal turning point." },
+        { q: "Which British mathematician helped crack the German Enigma code at Bletchley Park?", opts: ["Isaac Newton", "Alan Turing", "Charles Babbage", "Stephen Hawking"], a: 1, explain: "Alan Turing led the decryption effort, building the Bombe machine that cracked Enigma and saved countless Allied lives." },
+        { q: "What surprise attack brought the United States into WWII?", opts: ["Battle of Midway", "Sinking of USS Arizona", "Attack on Pearl Harbor", "Invasion of the Philippines"], a: 2, explain: "Japan's surprise attack on Pearl Harbor on December 7, 1941 — 'a date which will live in infamy' — brought the U.S. into WWII." },
+        { q: "Which U.S. President authorized the atomic bombings of Hiroshima and Nagasaki?", opts: ["Franklin Roosevelt", "Harry Truman", "Dwight Eisenhower", "John Kennedy"], a: 1, explain: "President Truman authorized the use of atomic bombs in August 1945, leading to Japan's unconditional surrender." },
+        { q: "The 'D-Day' landing took place on the beaches of which country?", opts: ["Belgium", "The Netherlands", "Germany", "France"], a: 3, explain: "Allied forces landed on five beaches in Normandy, France on June 6, 1944." },
+        { q: "Which German general was nicknamed 'The Desert Fox'?", opts: ["Heinrich Himmler", "Erich von Manstein", "Erwin Rommel", "Karl Dönitz"], a: 2, explain: "Erwin Rommel earned the nickname 'The Desert Fox' for his skilled armored warfare tactics in the North Africa campaign." },
+        { q: "Germany's systematic genocide of Jewish people during WWII is known as:", opts: ["The Inquisition", "The Purge", "The Holocaust", "The Final Campaign"], a: 2, explain: "The Holocaust was Nazi Germany's systematic, state-sponsored murder of six million Jews and millions of others." }
+    ]
+};
+
+// =============================================================
+//  QUIZ STATE MACHINE
+// =============================================================
+let quizState = {
+    war: 'ww1',
+    questions: [],
+    currentIdx: 0,
+    score: 0,
+    timerInterval: null,
+    timeLeft: 15,
+    answered: false,
+    answered_log: [] // { correct: bool }
+};
+
+function openQuizModal() {
+    document.getElementById('quiz-modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    showQuizScreen('quiz-intro');
+    // Pre-select the war based on what's currently loaded
+    const currentWar = window.currentWar || 'ww1';
+    document.getElementById('quiz-ww1-btn').style.borderWidth = currentWar === 'ww1' ? '3px' : '2px';
+    document.getElementById('quiz-ww2-btn').style.borderWidth = currentWar === 'ww2' ? '3px' : '2px';
+}
+
+function closeQuizModal() {
+    clearInterval(quizState.timerInterval);
+    document.getElementById('quiz-modal').classList.add('hidden');
+    document.body.style.overflow = 'auto';
+}
+
+function showQuizScreen(screenId) {
+    ['quiz-intro', 'quiz-question-screen', 'quiz-results-screen'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            if (id === screenId) el.classList.remove('hidden');
+            else el.classList.add('hidden');
+        }
+    });
+}
+
+function startQuiz(war) {
+    quizState.war = war;
+    // Shuffle and pick 10 questions
+    const pool = [...quizBank[war]].sort(() => Math.random() - 0.5).slice(0, 10);
+    quizState.questions = pool;
+    quizState.currentIdx = 0;
+    quizState.score = 0;
+    quizState.answered_log = [];
+    showQuizScreen('quiz-question-screen');
+    renderQuestion();
+}
+
+function restartQuiz() {
+    showQuizScreen('quiz-intro');
+}
+
+function renderQuestion() {
+    clearInterval(quizState.timerInterval);
+    const q = quizState.questions[quizState.currentIdx];
+    const total = quizState.questions.length;
+    const idx = quizState.currentIdx;
+
+    // Update status bar
+    document.getElementById('quiz-q-counter').textContent = `Question ${idx + 1} of ${total}`;
+    document.getElementById('quiz-score-live').textContent = `Score: ${quizState.score}`;
+    document.getElementById('quiz-question-text').textContent = q.q;
+
+    // Render choices
+    const choicesEl = document.getElementById('quiz-choices');
+    choicesEl.innerHTML = q.opts.map((opt, i) =>
+        `<button class="quiz-choice-btn" id="quiz-choice-${i}" onclick="selectAnswer(${i})">${opt}</button>`
+    ).join('');
+
+    // Hide explanation
+    const explanEl = document.getElementById('quiz-explanation');
+    explanEl.classList.add('hidden');
+    explanEl.textContent = '';
+
+    quizState.answered = false;
+    startTimer();
+}
+
+function startTimer() {
+    quizState.timeLeft = 15;
+    const fillEl = document.getElementById('quiz-timer-fill');
+    const labelEl = document.getElementById('quiz-timer-label');
+    if (fillEl) { fillEl.style.width = '100%'; fillEl.classList.remove('urgent'); }
+    if (labelEl) labelEl.textContent = '15s';
+
+    quizState.timerInterval = setInterval(() => {
+        quizState.timeLeft--;
+        const pct = (quizState.timeLeft / 15) * 100;
+        if (fillEl) {
+            fillEl.style.width = pct + '%';
+            if (quizState.timeLeft <= 5) fillEl.classList.add('urgent');
+        }
+        if (labelEl) labelEl.textContent = quizState.timeLeft + 's';
+
+        if (quizState.timeLeft <= 0) {
+            clearInterval(quizState.timerInterval);
+            if (!quizState.answered) timeExpired();
+        }
+    }, 1000);
+}
+
+function timeExpired() {
+    quizState.answered = true;
+    quizState.answered_log.push({ correct: false });
+    const q = quizState.questions[quizState.currentIdx];
+    // Mark correct answer
+    const correctBtn = document.getElementById(`quiz-choice-${q.a}`);
+    if (correctBtn) correctBtn.classList.add('correct');
+    disableChoices();
+    showExplanation('⏱ Time\'s up! ' + q.explain);
+    setTimeout(advanceQuestion, 2500);
+}
+
+function selectAnswer(chosen) {
+    if (quizState.answered) return;
+    quizState.answered = true;
+    clearInterval(quizState.timerInterval);
+
+    const q = quizState.questions[quizState.currentIdx];
+    const isCorrect = chosen === q.a;
+    quizState.answered_log.push({ correct: isCorrect });
+    if (isCorrect) quizState.score++;
+    document.getElementById('quiz-score-live').textContent = `Score: ${quizState.score}`;
+
+    // Visual feedback
+    const chosenBtn = document.getElementById(`quiz-choice-${chosen}`);
+    const correctBtn = document.getElementById(`quiz-choice-${q.a}`);
+    if (chosenBtn) chosenBtn.classList.add(isCorrect ? 'correct' : 'incorrect');
+    if (!isCorrect && correctBtn) correctBtn.classList.add('correct');
+    disableChoices();
+    showExplanation((isCorrect ? '✓ Correct! ' : '✗ Incorrect. ') + q.explain);
+    setTimeout(advanceQuestion, isCorrect ? 1800 : 2800);
+}
+
+function disableChoices() {
+    document.querySelectorAll('.quiz-choice-btn').forEach(b => b.disabled = true);
+}
+
+function showExplanation(text) {
+    const el = document.getElementById('quiz-explanation');
+    el.textContent = text;
+    el.classList.remove('hidden');
+}
+
+function advanceQuestion() {
+    quizState.currentIdx++;
+    if (quizState.currentIdx >= quizState.questions.length) {
+        showResults();
+    } else {
+        renderQuestion();
+    }
+}
+
+function showResults() {
+    const score = quizState.score;
+    const total = quizState.questions.length;
+    const pct = Math.round((score / total) * 100);
+
+    // Determine rank and medal
+    let rank, medal;
+    if (pct === 100)     { rank = 'Supreme Commander'; medal = '🏆'; }
+    else if (pct >= 80)  { rank = 'Field Marshal';     medal = '🎖️'; }
+    else if (pct >= 60)  { rank = 'General';           medal = '🥇'; }
+    else if (pct >= 40)  { rank = 'Sergeant';          medal = '🥈'; }
+    else if (pct >= 20)  { rank = 'Private';           medal = '🥉'; }
+    else                  { rank = 'Recruit';           medal = '📜'; }
+
+    // Update high score
+    if (visitorSession && score > visitorSession.quizHighScore) {
+        visitorSession.quizHighScore = score;
+        saveVisitorSession();
+    }
+
+    document.getElementById('quiz-medal').textContent = medal;
+    document.getElementById('quiz-rank-title').textContent = rank;
+    document.getElementById('quiz-result-text').textContent = `You answered ${score} out of ${total} correctly — ${pct}%!`;
+
+    // Score breakdown
+    const correct = quizState.answered_log.filter(l => l.correct).length;
+    const incorrect = quizState.answered_log.filter(l => !l.correct).length;
+    const highScore = visitorSession ? visitorSession.quizHighScore : score;
+    document.getElementById('quiz-score-breakdown').innerHTML = `
+        <div class="score-stat">
+            <span class="score-stat-value" style="color:#2ec4b6">${correct}</span>
+            <span class="score-stat-label">Correct</span>
+        </div>
+        <div class="score-stat">
+            <span class="score-stat-value" style="color:#e71d36">${incorrect}</span>
+            <span class="score-stat-label">Incorrect</span>
+        </div>
+        <div class="score-stat">
+            <span class="score-stat-value">${pct}%</span>
+            <span class="score-stat-label">Accuracy</span>
+        </div>
+        <div class="score-stat">
+            <span class="score-stat-value">${highScore}</span>
+            <span class="score-stat-label">Best Score</span>
+        </div>
+    `;
+
+    showQuizScreen('quiz-results-screen');
+    updateProgressRing();
+}
+
+// =============================================================
+//  BOOT — check for returning visitor on page load
+// =============================================================
+(function boot() {
+    const isReturning = loadVisitorSession();
+    if (isReturning && visitorSession && visitorSession.age >= 14) {
+        // Skip onboarding entirely for returning visitors
+        document.getElementById('onboarding-overlay').style.display = 'none';
+    }
+})();
+
+// =============================================================
+//  INTERACTIVE PROFILE DROPDOWN MENU & MILESTONES ENGINE
+// =============================================================
+function toggleProfileDropdown(event) {
+    if (event) event.stopPropagation();
+    const dropdown = document.getElementById('profile-dropdown');
+    const badge = document.getElementById('visitor-badge');
+    if (!dropdown || !badge) return;
+    
+    const isHidden = dropdown.classList.contains('hidden');
+    if (isHidden) {
+        dropdown.classList.remove('hidden');
+        badge.setAttribute('aria-expanded', 'true');
+        updateProfileMenuData();
+    } else {
+        dropdown.classList.add('hidden');
+        badge.setAttribute('aria-expanded', 'false');
+    }
+}
+
+function updateProfileMenuData() {
+    if (!visitorSession) return;
+    
+    // Core details
+    document.getElementById('profile-visitor-name').textContent = visitorSession.name;
+    
+    const currentWarKey = window.currentWar || 'ww1';
+    const totalIds = getExploreableEventIds(currentWarKey);
+    const total = totalIds.size || 14;
+    
+    let exploredCount = 0;
+    visitorSession.exploredEvents.forEach(id => {
+        if (totalIds.has(id)) {
+            exploredCount++;
+        }
+    });
+
+    const pct = Math.min(Math.round((exploredCount / total) * 100), 100);
+    
+    // Assign a rank based on progress
+    let rank = 'Recruit';
+    if (pct >= 90) rank = 'Supreme Commander';
+    else if (pct >= 70) rank = 'Field Marshal';
+    else if (pct >= 50) rank = 'General';
+    else if (pct >= 30) rank = 'Sergeant';
+    else if (pct >= 10) rank = 'Private';
+    
+    document.getElementById('profile-rank').textContent = rank;
+    document.getElementById('profile-stat-progress').textContent = pct + '%';
+    document.getElementById('profile-stat-quiz').textContent = (visitorSession.quizHighScore || 0) + ' / 10';
+    
+    // Check Milestones & Achievements
+    const firstEl = document.getElementById('milestone-first');
+    const timelineEl = document.getElementById('milestone-timeline');
+    const quizEl = document.getElementById('milestone-quiz');
+    const perfectEl = document.getElementById('milestone-perfect');
+    
+    if (!firstEl || !timelineEl || !quizEl || !perfectEl) return;
+    
+    // 1. First Steps
+    if (exploredCount >= 1) {
+        firstEl.classList.remove('locked');
+        firstEl.classList.add('unlocked');
+    } else {
+        firstEl.classList.add('locked');
+        firstEl.classList.remove('unlocked');
+    }
+    
+    // 2. Combat Veteran
+    if (pct >= 50) {
+        timelineEl.classList.remove('locked');
+        timelineEl.classList.add('unlocked');
+    } else {
+        timelineEl.classList.add('locked');
+        timelineEl.classList.remove('unlocked');
+    }
+    
+    // 3. Historian (Took a quiz, scored at least 1)
+    if (visitorSession.quizHighScore > 0) {
+        quizEl.classList.remove('locked');
+        quizEl.classList.add('unlocked');
+    } else {
+        quizEl.classList.add('locked');
+        quizEl.classList.remove('unlocked');
+    }
+    
+    // 4. Tactician (Perfect Score)
+    if (visitorSession.quizHighScore === 10) {
+        perfectEl.classList.remove('locked');
+        perfectEl.classList.add('unlocked');
+    } else {
+        perfectEl.classList.add('locked');
+        perfectEl.classList.remove('unlocked');
+    }
+}
+
+function startEditingName(event) {
+    if (event) event.stopPropagation();
+    if (!visitorSession) return;
+    
+    const nameWrap = document.querySelector('.profile-name-wrap');
+    const inputWrap = document.querySelector('.profile-edit-input-wrap');
+    const inputField = document.getElementById('profile-name-input');
+    
+    if (!nameWrap || !inputWrap || !inputField) return;
+    
+    nameWrap.classList.add('hidden');
+    inputWrap.classList.remove('hidden');
+    inputField.value = visitorSession.name;
+    inputField.focus();
+    inputField.select();
+}
+
+function saveEditedName(event) {
+    if (event) event.stopPropagation();
+    if (!visitorSession) return;
+    
+    const inputField = document.getElementById('profile-name-input');
+    if (!inputField) return;
+    
+    const newName = inputField.value.trim();
+    if (!newName) {
+        alert('Explorer name cannot be empty.');
+        return;
+    }
+    
+    visitorSession.name = newName;
+    saveVisitorSession();
+    
+    // Update badge & dropdown UI
+    document.getElementById('profile-visitor-name').textContent = newName;
+    document.getElementById('badge-visitor-name').textContent = newName;
+    
+    cancelEditingName();
+}
+
+function cancelEditingName(event) {
+    if (event) event.stopPropagation();
+    const nameWrap = document.querySelector('.profile-name-wrap');
+    const inputWrap = document.querySelector('.profile-edit-input-wrap');
+    
+    if (!nameWrap || !inputWrap) return;
+    
+    nameWrap.classList.remove('hidden');
+    inputWrap.classList.add('hidden');
+}
+
+function confirmResetProgress(event) {
+    if (event) event.stopPropagation();
+    if (!confirm('Are you sure you want to reset all timeline exploration progress and quiz high scores? This action cannot be undone.')) {
+        return;
+    }
+    
+    visitorSession.exploredEvents = new Set();
+    visitorSession.quizHighScore = 0;
+    saveVisitorSession();
+    
+    // Update badge, dropdown, progress rings
+    updateProgressRing();
+    updateProfileMenuData();
+    
+    alert('Your exploration history and challenge achievements have been successfully reset.');
+}
+
+function logoutSession(event) {
+    if (event) event.stopPropagation();
+    if (!confirm('Are you sure you want to log out? This will completely clear your name and exploration profile.')) {
+        return;
+    }
+    
+    localStorage.removeItem(VISITOR_KEY);
+    visitorSession = null;
+    
+    // Smooth transition reload
+    const body = document.body;
+    body.style.transition = 'opacity 0.4s ease';
+    body.style.opacity = '0';
+    
+    setTimeout(() => {
+        window.location.reload();
+    }, 400);
+}
+
+// Bind key listener to input field
+document.addEventListener('DOMContentLoaded', () => {
+    const inputField = document.getElementById('profile-name-input');
+    if (inputField) {
+        inputField.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                saveEditedName(e);
+            }
+        });
+    }
+});
+
+// Close profile dropdown when clicking outside
+window.addEventListener('click', function(event) {
+    const dropdown = document.getElementById('profile-dropdown');
+    const badge = document.getElementById('visitor-badge');
+    if (!dropdown || !badge) return;
+    
+    if (!dropdown.contains(event.target) && !badge.contains(event.target)) {
+        dropdown.classList.add('hidden');
+        badge.setAttribute('aria-expanded', 'false');
+    }
+});
+
+

@@ -95,6 +95,96 @@
                 <span class="back-arrow">←</span> Back
             </button>
             <h2 id="war-title" class="dash-title">War Title</h2>
+            <div class="header-actions">
+                <button class="quiz-trigger-btn" id="quiz-trigger-btn" onclick="openQuizModal()" aria-label="Open History Challenge Quiz">
+                    <span class="quiz-icon">⚔️</span> History Challenge
+                </button>
+                <div class="visitor-badge" id="visitor-badge" onclick="toggleProfileDropdown(event)" role="button" aria-expanded="false" aria-haspopup="true" tabindex="0" title="Click to view profile & milestones">
+                    <div class="visitor-badge-info">
+                        <span class="visitor-badge-name" id="badge-visitor-name">Explorer</span>
+                        <span class="visitor-badge-rank" id="badge-rank">Recruit</span>
+                    </div>
+                    <div class="progress-ring-container">
+                        <svg class="progress-ring" width="44" height="44">
+                            <circle class="progress-ring-bg" cx="22" cy="22" r="18"/>
+                            <circle class="progress-ring-fill" id="progress-ring-fill" cx="22" cy="22" r="18"
+                                stroke-dasharray="113.1" stroke-dashoffset="113.1"/>
+                        </svg>
+                        <span class="progress-ring-pct" id="progress-ring-pct">0%</span>
+                    </div>
+                </div>
+
+                <!-- Floating Profile Dropdown -->
+                <div id="profile-dropdown" class="profile-dropdown hidden" onclick="event.stopPropagation()">
+                    <div class="profile-dropdown-header">
+                        <div class="profile-avatar">👤</div>
+                        <div class="profile-meta">
+                            <div class="profile-name-wrap">
+                                <span id="profile-visitor-name">Explorer</span>
+                                <button class="profile-edit-btn" onclick="startEditingName(event)" aria-label="Edit name">✏️</button>
+                            </div>
+                            <div class="profile-edit-input-wrap hidden">
+                                <input type="text" id="profile-name-input" maxlength="20" aria-label="New name value">
+                                <button class="profile-save-btn" onclick="saveEditedName(event)">✓</button>
+                                <button class="profile-cancel-btn" onclick="cancelEditingName(event)">✕</button>
+                            </div>
+                            <span class="profile-rank" id="profile-rank">Recruit</span>
+                        </div>
+                    </div>
+
+                    <div class="profile-stats-grid">
+                        <div class="profile-stat-box">
+                            <span class="profile-stat-label">War Explored</span>
+                            <span class="profile-stat-value" id="profile-stat-progress">0%</span>
+                        </div>
+                        <div class="profile-stat-box">
+                            <span class="profile-stat-label">Quiz High Score</span>
+                            <span class="profile-stat-value" id="profile-stat-quiz">0/10</span>
+                        </div>
+                    </div>
+
+                    <div class="profile-section-title">Milestones & Achievements</div>
+                    <div class="profile-milestones" id="profile-milestones">
+                        <div class="milestone-item" id="milestone-first">
+                            <span class="milestone-icon">🎖️</span>
+                            <div class="milestone-text">
+                                <span class="milestone-name">First Steps</span>
+                                <span class="milestone-desc">Explore 1 historical event</span>
+                            </div>
+                        </div>
+                        <div class="milestone-item" id="milestone-timeline">
+                            <span class="milestone-icon">⚔️</span>
+                            <div class="milestone-text">
+                                <span class="milestone-name">Combat Veteran</span>
+                                <span class="milestone-desc">Explore 50% of the timeline</span>
+                            </div>
+                        </div>
+                        <div class="milestone-item" id="milestone-quiz">
+                            <span class="milestone-icon">🎓</span>
+                            <div class="milestone-text">
+                                <span class="milestone-name">Historian</span>
+                                <span class="milestone-desc">Challenge the Knowledge Quiz</span>
+                            </div>
+                        </div>
+                        <div class="milestone-item" id="milestone-perfect">
+                            <span class="milestone-icon">🏆</span>
+                            <div class="milestone-text">
+                                <span class="milestone-name">Tactician</span>
+                                <span class="milestone-desc">Score a perfect 10/10 on the Quiz</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="profile-actions">
+                        <button class="profile-action-btn reset-btn" onclick="confirmResetProgress(event)">
+                            <span class="action-icon">🔄</span> Reset Progress
+                        </button>
+                        <button class="profile-action-btn logout-btn" onclick="logoutSession(event)">
+                            <span class="action-icon">🚪</span> Log Out
+                        </button>
+                    </div>
+                </div>
+            </div>
         </header>
 
         <div class="dash-grid">
@@ -266,6 +356,52 @@
         <button class="close-btn" style="top: 2rem; right: 2rem; background: rgba(255,255,255,0.2);">×</button>
         <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; padding: 2rem;">
             <img id="lightbox-img" src="" style="max-width: 95%; max-height: 95%; object-fit: contain; box-shadow: 0 0 50px rgba(0,0,0,0.5); border-radius: 4px; transition: transform 0.3s ease;">
+        </div>
+    </div>
+
+    <!-- ===== HISTORY CHALLENGE QUIZ MODAL ===== -->
+    <div id="quiz-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="quiz-modal-heading" style="z-index: 6000;">
+        <div class="quiz-modal-content">
+
+            <!-- Intro Screen -->
+            <div id="quiz-intro" class="quiz-screen">
+                <div class="quiz-emblem">⚔️</div>
+                <h2 id="quiz-modal-heading" class="quiz-title">History Challenge</h2>
+                <p class="quiz-subtitle">Test your knowledge of the World Wars.<br>10 questions. 15 seconds each. Choose wisely.</p>
+                <div class="quiz-war-select">
+                    <button class="quiz-war-btn" id="quiz-ww1-btn" onclick="startQuiz('ww1')">WWI — The Great War</button>
+                    <button class="quiz-war-btn" id="quiz-ww2-btn" onclick="startQuiz('ww2')">WWII — The World War</button>
+                </div>
+                <button class="quiz-close-btn" onclick="closeQuizModal()">✕ Close</button>
+            </div>
+
+            <!-- Question Screen -->
+            <div id="quiz-question-screen" class="quiz-screen hidden">
+                <div class="quiz-status-bar">
+                    <span id="quiz-q-counter" class="quiz-q-counter">Question 1 of 10</span>
+                    <div class="quiz-timer-wrap">
+                        <div class="quiz-timer-bar"><div id="quiz-timer-fill" class="quiz-timer-fill"></div></div>
+                        <span id="quiz-timer-label" class="quiz-timer-label">15s</span>
+                    </div>
+                    <span id="quiz-score-live" class="quiz-score-live">Score: 0</span>
+                </div>
+                <p id="quiz-question-text" class="quiz-question-text">Loading question…</p>
+                <div id="quiz-choices" class="quiz-choices"></div>
+                <p id="quiz-explanation" class="quiz-explanation hidden"></p>
+            </div>
+
+            <!-- Results Screen -->
+            <div id="quiz-results-screen" class="quiz-screen hidden">
+                <div id="quiz-medal" class="quiz-medal">🎖️</div>
+                <h2 class="quiz-title" id="quiz-rank-title">Field Marshal</h2>
+                <p class="quiz-subtitle" id="quiz-result-text">You answered 8 / 10 correctly!</p>
+                <div class="quiz-score-breakdown" id="quiz-score-breakdown"></div>
+                <div class="quiz-results-actions">
+                    <button class="quiz-war-btn" onclick="restartQuiz()">Try Again</button>
+                    <button class="quiz-close-btn" onclick="closeQuizModal()">✕ Exit</button>
+                </div>
+            </div>
+
         </div>
     </div>
 
