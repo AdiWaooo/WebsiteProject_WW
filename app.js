@@ -814,18 +814,34 @@ function showVisitorForm() {
 
 function submitVisitor() {
     const name = document.getElementById('visitor-name').value.trim();
-    const age = document.getElementById('visitor-age').value.trim();
+    const ageVal = document.getElementById('visitor-age').value.trim();
 
-    if (!name || !age) {
+    if (!name || !ageVal) {
         alert('Please enter both your name and age to proceed.');
+        return;
+    }
+
+    const age = parseInt(ageVal, 10);
+    if (isNaN(age) || age < 1) {
+        alert('Please enter a valid age.');
+        return;
+    }
+
+    if (age < 14) {
+        // Hide the form screen
+        document.getElementById('visitor-form-screen').classList.add('hidden');
+        
+        // Populate and display Access Restricted screen
+        document.getElementById('denied-visitor-name').innerText = name;
+        document.getElementById('access-denied-screen').classList.remove('hidden');
         return;
     }
 
     // Hide overlay
     document.getElementById('onboarding-overlay').style.display = 'none';
 
-    // Show alert
-    alert('this page welcomes you to learn about history');
+    // Show welcome message
+    alert(`Welcome, ${name}. This page welcomes you to learn about history.`);
 }
 
 // WW2 Theatre Split Screen Logic
