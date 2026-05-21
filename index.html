@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>World Wars — Interactive History Dashboard</title>
+    <meta name="description" content="An interactive history dashboard exploring the causes, alliances, and key timeline events of World War I and World War II.">
+    <link rel="stylesheet" href="fonts.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- ===== ONBOARDING FLOW ===== -->
+    <div id="onboarding-overlay" class="modal-overlay" style="position: fixed; inset: 0; z-index: 10000; background: var(--bg-color); display: flex; align-items: center; justify-content: center; overflow-y: auto; padding: 2rem;">
+        
+        <!-- Welcome Screen -->
+        <div id="welcome-screen" class="onboarding-content">
+            <h1 class="dash-title" style="font-size: clamp(2rem, 5vw, 3rem); text-align: center; margin-bottom: 1.5rem;">Welcome to the Crucible of History</h1>
+            <p style="font-size: 1.1rem; line-height: 1.8; text-align: center; margin-bottom: 2rem; color: var(--text-primary);">
+                This interactive experience is designed for educational purposes, guiding you through the monumental events of the World Wars. 
+                By exploring these turning points in history, we gain a deeper understanding of our modern political world, the heavy cost of conflict, and the enduring resilience of humanity. 
+                <br><br>
+                Step back in time, and discover how the past continues to shape our future.
+            </p>
+            <div style="text-align: center;">
+                <button class="interactive-btn" onclick="showVisitorForm()" style="width: auto;">Proceed to Experience</button>
+            </div>
+        </div>
+
+        <!-- Form Screen -->
+        <div id="visitor-form-screen" class="onboarding-content hidden">
+            <h2 class="dash-title" style="font-size: clamp(1.5rem, 4vw, 2.5rem); text-align: center; margin-bottom: 1.5rem;">Visitor Registration</h2>
+            <p style="text-align: center; margin-bottom: 2rem; color: var(--text-secondary);">Please enter your details to begin your journey.</p>
+            
+            <div style="display: flex; flex-direction: column; gap: 1.5rem; max-width: 350px; margin: 0 auto;">
+                <input type="text" id="visitor-name" placeholder="Enter your Name" required style="padding: 1rem; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--card-bg); color: var(--text-primary); font-family: 'Inter', sans-serif; font-size: 1rem; outline: none;">
+                
+                <input type="number" id="visitor-age" placeholder="Enter your Age" required min="1" style="padding: 1rem; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--card-bg); color: var(--text-primary); font-family: 'Inter', sans-serif; font-size: 1rem; outline: none;">
+                
+                <button class="interactive-btn" onclick="submitVisitor()">Begin Exploration</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ===== LANDING / HERO SPLIT SCREEN ===== -->
+    <section id="main-landing" class="hero-split">
+        <button class="about-btn" onclick="openAboutModal()" aria-label="About this project">
+            <span class="info-icon">ℹ️</span> Project Info
+        </button>
+
+        <div class="hero-panel panel-ww1" id="btn-ww1" onclick="selectWar('ww1')" onkeydown="if(event.key==='Enter') selectWar('ww1')" role="button" tabindex="0" aria-label="Select World War I">
+            <div class="panel-overlay"></div>
+            <div class="panel-content">
+                <span class="panel-label">The Great War</span>
+                <h1 class="panel-title">World<br>War I</h1>
+                <p class="panel-years">1914 — 1918</p>
+                <span class="panel-cta">Explore <span class="arrow">→</span></span>
+            </div>
+        </div>
+
+        <div class="divider">
+            <span>VS</span>
+        </div>
+
+        <div class="hero-panel panel-ww2" id="btn-ww2" onclick="selectWar('ww2')" onkeydown="if(event.key==='Enter') selectWar('ww2')" role="button" tabindex="0" aria-label="Select World War II">
+            <div class="panel-overlay"></div>
+            <div class="panel-content">
+                <span class="panel-label">The World War</span>
+                <h1 class="panel-title">World<br>War II</h1>
+                <p class="panel-years">1939 — 1945</p>
+                <span class="panel-cta">Explore <span class="arrow">→</span></span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== MAIN DASHBOARD (hidden until war is selected) ===== -->
+    <main id="dashboard" class="hidden">
+
+        <header class="dash-header">
+            <button class="back-btn" onclick="resetView()" aria-label="Go back to selection">
+                <span class="back-arrow">←</span> Back
+            </button>
+            <h2 id="war-title" class="dash-title">War Title</h2>
+        </header>
+
+        <div class="dash-grid">
+
+            <!-- Causes Card -->
+            <section class="card card-causes" aria-label="Causes of the War">
+                <div class="card-header">
+                    <span class="card-icon">⚡</span>
+                    <h3>Causes</h3>
+                </div>
+                <ul id="causes-list" class="causes-list"></ul>
+            </section>
+
+            <!-- Alliances Card -->
+            <section class="card card-alliances" aria-label="Wartime Alliances">
+                <div class="card-header">
+                    <span class="card-icon">🤝</span>
+                    <h3>Alliances</h3>
+                </div>
+                <div id="alliances-container" class="alliances-text"></div>
+            </section>
+
+            <!-- Timeline Card -->
+            <section class="card card-timeline" aria-label="Key Timeline Events">
+                <div class="card-header">
+                    <span class="card-icon">📅</span>
+                    <h3 id="timeline-section-title">Key Events Timeline</h3>
+                </div>
+                <div id="timeline" class="timeline-wrapper"></div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Theatre Split Screen (WW2) -->
+    <section id="theatre-split" class="hero-split hidden" style="position: fixed; inset: 0; z-index: 200;">
+        <button class="back-btn" onclick="closeTheatreSplit()" style="position: absolute; top: 1.5rem; left: 3rem; z-index: 210;">
+            <span class="back-arrow">←</span> Back to Dashboard
+        </button>
+        <div class="hero-panel panel-europe" onclick="openTheatre('europe')" role="button" tabindex="0" style="background-image: url('EuropeanTheatre.png'); background-size: cover; background-position: center;">
+            <div class="panel-overlay"></div>
+            <div class="panel-content">
+                <span class="panel-label">European Theatre</span>
+                <h1 class="panel-title">War in<br>Europe</h1>
+                <span class="panel-cta">Explore Timeline <span class="arrow">→</span></span>
+            </div>
+        </div>
+        <div class="divider"><span>VS</span></div>
+        <div class="hero-panel panel-pacific" onclick="openTheatre('pacific')" role="button" tabindex="0" style="background-image: url('PacificTheatre.png'); background-size: cover; background-position: center;">
+            <div class="panel-overlay"></div>
+            <div class="panel-content">
+                <span class="panel-label">Pacific Theatre</span>
+                <h1 class="panel-title">War in the<br>Pacific</h1>
+                <span class="panel-cta">Explore Timeline <span class="arrow">→</span></span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Theatre Details View (Fullscreen Overlay) -->
+    <section id="theatre-details" class="hero-split hidden" style="position: fixed; inset: 0; z-index: 300; display: block; overflow-y: auto; background: var(--bg-color);">
+        <button class="back-btn" onclick="closeTheatreDetails()" style="position: sticky; top: 1.5rem; left: 3rem; z-index: 310; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.8rem 1.5rem; border-radius: 50px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; transition: all 0.3s ease;">
+            <span class="back-arrow">←</span> Back to Selection
+        </button>
+        
+        <div class="theatre-hero" id="theatre-hero-bg" style="height: 45vh; position: relative; background-size: cover; background-position: center; display: flex; align-items: flex-end; padding: 4rem;">
+            <div class="panel-overlay" style="background: linear-gradient(to top, var(--bg-color), transparent);"></div>
+            <h1 id="theatre-title-main" class="panel-title" style="position: relative; z-index: 1; margin: 0; font-size: 5rem;">European Theatre</h1>
+        </div>
+
+        <nav class="theatre-nav" style="position: sticky; top: 0; background: rgba(0,0,0,0.9); backdrop-filter: blur(15px); z-index: 305; padding: 1.2rem 4rem; display: flex; gap: 3rem; border-bottom: 1px solid rgba(255,255,255,0.1); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <button id="nav-military" class="nav-link active" onclick="switchTheatreTab('military')">Military Timeline</button>
+            <button id="nav-atrocities" class="nav-link" onclick="switchTheatreTab('atrocities')">Human Cost & Atrocities</button>
+        </nav>
+
+        <div id="theatre-content" style="padding: 4rem; max-width: 1400px; margin: 0 auto;">
+            <!-- Categorized content will be injected here -->
+        </div>
+    </section>
+
+    <!-- Theatre Event Modal -->
+    <div id="theatre-event-modal" class="modal hidden" role="dialog" aria-modal="true" style="z-index: 400;">
+        <div class="modal-content" style="max-width: 1100px; width: 90vw;">
+            <button class="close-btn" onclick="closeTheatreEventModal()">×</button>
+            <div class="modal-grid">
+                <div class="modal-text-side">
+                    <h2 id="theatre-event-title">Event Title</h2>
+                    <div id="theatre-event-body" class="historical-text"></div>
+                </div>
+                <div class="modal-gallery-side">
+                    <div id="theatre-event-gallery" class="modal-gallery"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alliances Split Screen -->
+    <section id="alliances-split" class="hero-split hidden" style="position: fixed; inset: 0; z-index: 200;">
+        <button class="back-btn" onclick="closeAlliancesSplit()" style="position: absolute; top: 1.5rem; left: 3rem; z-index: 210;">
+            <span class="back-arrow">←</span> Back to Dashboard
+        </button>
+        <div id="alliances-left-panel" class="hero-panel" onclick="openFigures('allies')" role="button" tabindex="0" style="background-size: cover; background-position: center;">
+            <div class="panel-overlay"></div>
+            <div class="panel-content">
+                <span id="alliances-left-label" class="panel-label">The Entente</span>
+                <h1 id="alliances-left-title" class="panel-title">Allied<br>Powers</h1>
+                <span class="panel-cta">View Key Figures <span class="arrow">→</span></span>
+            </div>
+        </div>
+        <div class="divider"><span>VS</span></div>
+        <div id="alliances-right-panel" class="hero-panel" onclick="openFigures('central')" role="button" tabindex="0" style="background-size: cover; background-position: center;">
+            <div class="panel-overlay"></div>
+            <div class="panel-content">
+                <span id="alliances-right-label" class="panel-label">The Quadruple Alliance</span>
+                <h1 id="alliances-right-title" class="panel-title">Central<br>Powers</h1>
+                <span class="panel-cta">View Key Figures <span class="arrow">→</span></span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Figures View -->
+    <section id="figures-view" class="hidden" style="position: fixed; inset: 0; z-index: 300; background: var(--bg-color); overflow-y: auto;">
+        <header class="dash-header">
+            <button class="back-btn" onclick="closeFiguresView()">
+                <span class="back-arrow">←</span> Back to Alliances
+            </button>
+            <h2 id="figures-title" class="dash-title">Key Figures</h2>
+        </header>
+        <div id="figures-container" class="figures-grid"></div>
+    </section>
+
+    <!-- Unified Main Modal (Causes, Timeline, Figures) -->
+    <div id="main-modal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-content">
+            <button class="close-btn" onclick="closeMainModal()">×</button>
+            <div class="modal-grid" id="main-modal-grid">
+                <div class="modal-text-side">
+                    <h2 id="main-modal-title">Title</h2>
+                    <div id="main-modal-body" class="historical-text"></div>
+                </div>
+                <div class="modal-gallery-side">
+                    <div id="main-modal-gallery" class="modal-gallery"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- About Project Modal -->
+    <div id="about-modal" class="modal hidden" aria-hidden="true" role="dialog">
+        <div class="modal-content" style="max-width: 700px; padding: 3.5rem; overflow-y: auto;">
+            <button class="close-btn" onclick="closeAboutModal()">×</button>
+            <h2 class="dash-title" style="margin-bottom: 2rem; font-size: 2.5rem;">Project Presentation</h2>
+            <div class="about-body">
+                <p><strong>Purpose:</strong> This interactive web application explores the history of the World Wars through a dynamic, visual, and highly accessible interface.</p>
+                <p><strong>Design & UX:</strong> Designed with a premium dark-mode aesthetic utilizing 'Cinzel' for cinematic headings and 'Inter' for highly readable body text. The layout uses CSS Grid and Flexbox for complete responsiveness.</p>
+                <p><strong>Innovative Features:</strong> 
+                    <br>• Revolving interactive timeline carousels.
+                    <br>• Full-screen theatre exploration with categorized history.
+                    <br>• Hover-activated Lightbox zoom for historical imagery.
+                    <br>• Auto-playing image slideshows for multi-image figures.
+                    <br>• Seamless, JavaScript-driven single-page navigation without page reloads.
+                </p>
+                <p><strong>Code Quality:</strong> Built with clean, semantic HTML5, modern CSS3 variables for dynamic theming, and modular JavaScript.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lightbox Modal for Full Image View -->
+    <div id="lightbox-modal" class="modal hidden" onclick="closeLightbox()" style="z-index: 5000; background: rgba(0,0,0,0.95); cursor: zoom-out;">
+        <button class="close-btn" style="top: 2rem; right: 2rem; background: rgba(255,255,255,0.2);">×</button>
+        <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; padding: 2rem;">
+            <img id="lightbox-img" src="" style="max-width: 95%; max-height: 95%; object-fit: contain; box-shadow: 0 0 50px rgba(0,0,0,0.5); border-radius: 4px; transition: transform 0.3s ease;">
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
