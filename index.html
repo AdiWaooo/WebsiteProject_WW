@@ -96,6 +96,9 @@
             </button>
             <h2 id="war-title" class="dash-title">War Title</h2>
             <div class="header-actions">
+                <button class="map-trigger-btn" id="map-trigger-btn" onclick="openCampaignMapView()" aria-label="Open Campaign Map">
+                    <span class="map-icon">🗺️</span> Tactical Map
+                </button>
                 <button class="quiz-trigger-btn" id="quiz-trigger-btn" onclick="openQuizModal()" aria-label="Open History Challenge Quiz">
                     <span class="quiz-icon">⚔️</span> History Challenge
                 </button>
@@ -331,6 +334,142 @@
         </div>
     </div>
 
+    <!-- ===== TACTICAL CAMPAIGN MAP SLIDER OVERLAY ===== -->
+    <section id="campaign-map-view" class="hidden" style="position: fixed; inset: 0; z-index: 350; background: var(--bg-color); overflow-y: auto; display: flex; flex-direction: column;">
+        <header class="dash-header">
+            <button class="back-btn" onclick="closeCampaignMapView()">
+                <span class="back-arrow">←</span> Back to Dashboard
+            </button>
+            <h2 id="campaign-map-title" class="dash-title">Interactive Campaign Map</h2>
+        </header>
+
+        <div class="map-split-container">
+            <!-- Map Side -->
+            <div class="map-arena">
+                <div class="map-tooltip" id="map-tooltip">Hover over a region</div>
+                <div class="map-svg-wrapper">
+                    <!-- Standardized highly-styled vector world map -->
+                    <svg viewBox="0 0 1000 500" id="tactical-svg-map">
+                        <!-- Custom World Map Background Image -->
+                        <image href="Worldmap.jpg" x="0" y="0" width="1000" height="500" preserveAspectRatio="none" style="opacity: 0.35; filter: grayscale(80%) contrast(120%) brightness(50%); pointer-events: none;" />
+
+                        <!-- North America -->
+                        <path id="reg-north-america" class="map-region" d="M 50,80 L 250,80 L 280,180 L 220,280 L 150,280 L 120,230 L 50,190 Z" />
+                        <text x="120" y="170" class="region-label">North America</text>
+
+                        <!-- United Kingdom -->
+                        <path id="reg-united-kingdom" class="map-region" d="M 330,100 Q 360,90 370,120 Q 360,170 330,150 Z" />
+                        <text x="290" y="130" class="region-label">UK</text>
+
+                        <!-- Western Europe -->
+                        <path id="reg-western-europe" class="map-region" d="M 380,160 L 440,160 L 440,240 L 380,240 Z" />
+                        <text x="350" y="210" class="region-label">W. Europe</text>
+
+                        <!-- Central Europe -->
+                        <path id="reg-central-europe" class="map-region" d="M 440,140 L 520,140 L 520,220 L 440,240 Z" />
+                        <text x="470" y="175" class="region-label">Central Europe</text>
+
+                        <!-- Eastern Europe (USSR) -->
+                        <path id="reg-eastern-europe" class="map-region" d="M 520,100 L 680,100 L 680,260 L 520,220 Z" />
+                        <text x="590" y="160" class="region-label">Eastern Front / USSR</text>
+
+                        <!-- Mediterranean & North Africa -->
+                        <path id="reg-north-africa" class="map-region" d="M 380,250 L 550,230 L 570,330 L 360,330 Z" />
+                        <text x="440" y="295" class="region-label">North Africa</text>
+
+                        <!-- East Asia & China -->
+                        <path id="reg-east-asia" class="map-region" d="M 680,130 L 850,130 L 820,300 L 680,260 Z" />
+                        <text x="720" y="200" class="region-label">East Asia / China</text>
+
+                        <!-- Japan -->
+                        <path id="reg-japan" class="map-region" d="M 870,140 Q 890,130 900,160 Q 880,230 860,210 Z" />
+                        <text x="910" y="160" class="region-label">Japan</text>
+
+                        <!-- Pacific Islands -->
+                        <path id="reg-pacific-islands" class="map-region" d="M 830,310 L 980,250 L 980,450 L 780,450 Z" />
+                        <text x="880" y="360" class="region-label">Pacific Ocean</text>
+
+                        <!-- Southeast Asia & Australia -->
+                        <path id="reg-australia" class="map-region" d="M 680,310 L 770,310 L 800,480 L 640,480 Z" />
+                        <text x="710" y="420" class="region-label">Aus / SE Asia</text>
+
+                        <!-- Active Hotspot Markers (Rendered Dynamically via JS) -->
+                        <g id="map-hotspots-group"></g>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Operations Deck (Sidebar) -->
+            <div class="map-sidebar">
+                <div class="operations-deck">
+                    <div class="op-header">
+                        <span class="op-badge">WAR ROOM</span>
+                        <h3 id="op-year-title">1942</h3>
+                        <p id="op-year-subtitle">The Tide Turns</p>
+                    </div>
+
+                    <div class="op-section">
+                        <h4 class="op-title">Territory Control Stats</h4>
+                        <div class="faction-bars">
+                            <div class="faction-bar-wrapper">
+                                <div class="faction-bar-info">
+                                    <span id="faction-allies-label">Allies</span>
+                                    <span id="faction-allies-pct">50%</span>
+                                </div>
+                                <div class="faction-bar-track">
+                                    <div id="faction-allies-fill" class="faction-bar-fill faction-allies" style="width: 50%;"></div>
+                                </div>
+                            </div>
+                            <div class="faction-bar-wrapper">
+                                <div class="faction-bar-info">
+                                    <span id="faction-axis-label">Axis / Central</span>
+                                    <span id="faction-axis-pct">35%</span>
+                                </div>
+                                <div class="faction-bar-track">
+                                    <div id="faction-axis-fill" class="faction-bar-fill faction-axis" style="width: 35%;"></div>
+                                </div>
+                            </div>
+                            <div class="faction-bar-wrapper">
+                                <div class="faction-bar-info">
+                                    <span>Neutral / Contested</span>
+                                    <span id="faction-neutral-pct">15%</span>
+                                </div>
+                                <div class="faction-bar-track">
+                                    <div id="faction-neutral-fill" class="faction-bar-fill faction-neutral" style="width: 15%;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="op-section">
+                        <h4 class="op-title">Operational Brief</h4>
+                        <p id="op-brief-text" class="op-text">
+                            Strategic summaries of global movements will appear here.
+                        </p>
+                    </div>
+
+                    <div class="op-section">
+                        <h4 class="op-title">Active Battlefront Hotspots</h4>
+                        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.8rem; font-style: italic;">Click hotspots on the map or links below to explore battle archives:</p>
+                        <div id="op-hotspots-list" class="op-hotspots-list">
+                            <!-- Hotspot buttons will be injected here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slider Bar Section -->
+        <div class="map-slider-panel">
+            <div class="slider-ticks-container">
+                <input type="range" id="campaign-year-slider" class="campaign-slider" min="1914" max="1918" step="1" value="1914" oninput="handleMapSliderInput(this.value)">
+                <div id="slider-ticks" class="slider-ticks">
+                    <!-- Dynamic year ticks injected here -->
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- About Project Modal -->
     <div id="about-modal" class="modal hidden" aria-hidden="true" role="dialog">
         <div class="modal-content" style="max-width: 700px; padding: 3.5rem; overflow-y: auto;">
@@ -388,6 +527,8 @@
                 <p id="quiz-question-text" class="quiz-question-text">Loading question…</p>
                 <div id="quiz-choices" class="quiz-choices"></div>
                 <p id="quiz-explanation" class="quiz-explanation hidden"></p>
+                <button id="quiz-next-btn" class="quiz-war-btn hidden" style="margin-top: 1rem; width: 100%;" onclick="triggerNextQuestion()">Next Question ➔</button>
+                <button class="quiz-close-btn" style="margin-top: 1.5rem;" onclick="closeQuizModal()">✕ Quit Quiz</button>
             </div>
 
             <!-- Results Screen -->

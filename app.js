@@ -1471,7 +1471,8 @@ let quizState = {
     timerInterval: null,
     timeLeft: 15,
     answered: false,
-    answered_log: [] // { correct: bool }
+    answered_log: [], // { correct: bool }
+    advanceTimeout: null // Keep track of the question advance timeout
 };
 
 function openQuizModal() {
@@ -1486,6 +1487,7 @@ function openQuizModal() {
 
 function closeQuizModal() {
     clearInterval(quizState.timerInterval);
+    clearTimeout(quizState.advanceTimeout);
     document.getElementById('quiz-modal').classList.add('hidden');
     document.body.style.overflow = 'auto';
 }
@@ -1518,6 +1520,7 @@ function restartQuiz() {
 
 function renderQuestion() {
     clearInterval(quizState.timerInterval);
+    clearTimeout(quizState.advanceTimeout);
     const q = quizState.questions[quizState.currentIdx];
     const total = quizState.questions.length;
     const idx = quizState.currentIdx;
@@ -1526,6 +1529,10 @@ function renderQuestion() {
     document.getElementById('quiz-q-counter').textContent = `Question ${idx + 1} of ${total}`;
     document.getElementById('quiz-score-live').textContent = `Score: ${quizState.score}`;
     document.getElementById('quiz-question-text').textContent = q.q;
+
+    // Hide Next Question button initially
+    const nextBtn = document.getElementById('quiz-next-btn');
+    if (nextBtn) nextBtn.classList.add('hidden');
 
     // Render choices
     const choicesEl = document.getElementById('quiz-choices');
@@ -1574,7 +1581,12 @@ function timeExpired() {
     if (correctBtn) correctBtn.classList.add('correct');
     disableChoices();
     showExplanation('⏱ Time\'s up! ' + q.explain);
-    setTimeout(advanceQuestion, 2500);
+    
+    // Reveal Next Question button
+    const nextBtn = document.getElementById('quiz-next-btn');
+    if (nextBtn) nextBtn.classList.remove('hidden');
+    
+    quizState.advanceTimeout = setTimeout(advanceQuestion, 2500);
 }
 
 function selectAnswer(chosen) {
@@ -1595,7 +1607,19 @@ function selectAnswer(chosen) {
     if (!isCorrect && correctBtn) correctBtn.classList.add('correct');
     disableChoices();
     showExplanation((isCorrect ? '✓ Correct! ' : '✗ Incorrect. ') + q.explain);
-    setTimeout(advanceQuestion, isCorrect ? 1800 : 2800);
+    
+    // Reveal Next Question button
+    const nextBtn = document.getElementById('quiz-next-btn');
+    if (nextBtn) nextBtn.classList.remove('hidden');
+    
+    quizState.advanceTimeout = setTimeout(advanceQuestion, isCorrect ? 1800 : 2800);
+}
+
+function triggerNextQuestion() {
+    clearTimeout(quizState.advanceTimeout);
+    const nextBtn = document.getElementById('quiz-next-btn');
+    if (nextBtn) nextBtn.classList.add('hidden');
+    advanceQuestion();
 }
 
 function disableChoices() {
@@ -1740,6 +1764,9 @@ function updateProfileMenuData() {
     
     // 1. First Steps
     if (exploredCount >= 1) {
+        if (!firstEl.classList.contains('unlocked')) {
+            showAchievementToast("First Steps", "Explore 1 historical event");
+        }
         firstEl.classList.remove('locked');
         firstEl.classList.add('unlocked');
     } else {
@@ -1749,6 +1776,9 @@ function updateProfileMenuData() {
     
     // 2. Combat Veteran
     if (pct >= 50) {
+        if (!timelineEl.classList.contains('unlocked')) {
+            showAchievementToast("Combat Veteran", "Explore 50% of the timeline");
+        }
         timelineEl.classList.remove('locked');
         timelineEl.classList.add('unlocked');
     } else {
@@ -1758,6 +1788,9 @@ function updateProfileMenuData() {
     
     // 3. Historian (Took a quiz, scored at least 1)
     if (visitorSession.quizHighScore > 0) {
+        if (!quizEl.classList.contains('unlocked')) {
+            showAchievementToast("Historian", "Challenge the Knowledge Quiz");
+        }
         quizEl.classList.remove('locked');
         quizEl.classList.add('unlocked');
     } else {
@@ -1767,12 +1800,54 @@ function updateProfileMenuData() {
     
     // 4. Tactician (Perfect Score)
     if (visitorSession.quizHighScore === 10) {
+        if (!perfectEl.classList.contains('unlocked')) {
+            showAchievementToast("Tactician", "Score a perfect 10/10 on the Quiz");
+        }
         perfectEl.classList.remove('locked');
         perfectEl.classList.add('unlocked');
     } else {
         perfectEl.classList.add('locked');
         perfectEl.classList.remove('unlocked');
     }
+}
+
+// Render dynamic floating Achievement Toast Pop-up
+function showAchievementToast(name, desc) {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+    }
+    
+    // Select visual icon dynamically
+    let badgeIcon = '🎖️';
+    if (name.includes('First Steps')) badgeIcon = '🎖️';
+    else if (name.includes('Combat Veteran')) badgeIcon = '⚔️';
+    else if (name.includes('Historian')) badgeIcon = '🎓';
+    else if (name.includes('Tactician')) badgeIcon = '🏆';
+    
+    // Create card element
+    const toast = document.createElement('div');
+    toast.className = 'achievement-toast';
+    toast.innerHTML = `
+        <div class="toast-badge">${badgeIcon}</div>
+        <div class="toast-content">
+            <span class="toast-title">Achievement Unlocked!</span>
+            <span class="toast-name">${name}</span>
+            <span class="toast-desc">${desc}</span>
+        </div>
+    `;
+    
+    container.appendChild(toast);
+    
+    // Slide out after 3.8 seconds
+    setTimeout(() => {
+        toast.classList.add('hide');
+        setTimeout(() => {
+            toast.remove();
+        }, 500);
+    }, 3800);
 }
 
 function startEditingName(event) {
@@ -1885,5 +1960,549 @@ window.addEventListener('click', function(event) {
         badge.setAttribute('aria-expanded', 'false');
     }
 });
+
+
+// =============================================================
+//  TACTICAL CAMPAIGN MAP SLIDER STATE MACHINE & DATA
+// =============================================================
+
+const campaignMapData = {
+    ww1: {
+        years: [1914, 1915, 1916, 1917, 1918],
+        factionNames: { allies: "Entente Powers", axis: "Central Powers" },
+        states: {
+            1914: {
+                subtitle: "Outbreak & Western Stalemate",
+                brief: "Archduke Franz Ferdinand's assassination triggers the alliance web. Germany's rapid invasion of France is halted at the Marne, leading both sides to dig trenches. Meanwhile, Russia invades East Prussia, opening the Eastern Front.",
+                stats: { allies: 55, axis: 25, neutral: 20 },
+                regions: {
+                    'reg-north-america': 'neutral',
+                    'reg-united-kingdom': 'allied',
+                    'reg-western-europe': 'allied',
+                    'reg-central-europe': 'axis-central',
+                    'reg-eastern-europe': 'allied',
+                    'reg-north-africa': 'neutral',
+                    'reg-east-asia': 'neutral',
+                    'reg-japan': 'neutral',
+                    'reg-pacific-islands': 'neutral',
+                    'reg-australia': 'allied'
+                },
+                hotspots: [
+                    { name: "Battle of the Marne", x: 410, y: 190, index: 0, text: "The Great stalemate begins on the Western Front as both armies dig trenches." }
+                ]
+            },
+            1915: {
+                subtitle: "Deadlock & New Fronts",
+                brief: "The Western Front remains a bloody stalemate. To break the deadlock, the Allies launch the Gallipoli Campaign against the Ottoman Empire (which joined the Central Powers), ending in disaster. German U-boats sink the RMS Lusitania, shifting global public opinion.",
+                stats: { allies: 52, axis: 33, neutral: 15 },
+                regions: {
+                    'reg-north-america': 'neutral',
+                    'reg-united-kingdom': 'allied',
+                    'reg-western-europe': 'allied',
+                    'reg-central-europe': 'axis-central',
+                    'reg-eastern-europe': 'allied',
+                    'reg-north-africa': 'axis-central',
+                    'reg-east-asia': 'neutral',
+                    'reg-japan': 'neutral',
+                    'reg-pacific-islands': 'neutral',
+                    'reg-australia': 'allied'
+                },
+                hotspots: [
+                    { name: "Sinking of RMS Lusitania", x: 310, y: 160, index: 1, text: "A German U-boat torpedoes a British luxury liner, fueling anti-German sentiment in the US." },
+                    { name: "Gallipoli Campaign", x: 520, y: 230, index: 1, text: "Allied forces attempt to seize the Dardanelles strait to knocking out the Ottomans." }
+                ]
+            },
+            1916: {
+                subtitle: "The Agony of Attrition",
+                brief: "Both factions launch massive offensives to bleed each other dry. The German attack at Verdun results in the longest battle of the war. The British counter-attack at the Somme sees over a million casualties. Tanks are introduced for the first time.",
+                stats: { allies: 52, axis: 33, neutral: 15 },
+                regions: {
+                    'reg-north-america': 'neutral',
+                    'reg-united-kingdom': 'allied',
+                    'reg-western-europe': 'allied',
+                    'reg-central-europe': 'axis-central',
+                    'reg-eastern-europe': 'allied',
+                    'reg-north-africa': 'axis-central',
+                    'reg-east-asia': 'neutral',
+                    'reg-japan': 'neutral',
+                    'reg-pacific-islands': 'neutral',
+                    'reg-australia': 'allied'
+                },
+                hotspots: [
+                    { name: "Battle of Verdun", x: 420, y: 190, index: 2, text: "One of the longest and bloodiest attritional battles of WWI." },
+                    { name: "Battle of the Somme", x: 405, y: 185, index: 2, text: "British armies suffer massive casualties attempting to pierce German lines." }
+                ]
+            },
+            1917: {
+                subtitle: "Shifting Fortunes & Revolution",
+                brief: "Under pressure of war, the Russian Empire collapses into revolution, forcing Russia's exit (Brest-Litovsk treaty). However, unrestricted German submarine warfare and the Zimmermann Telegram draw the industrial powerhouse of the United States into the conflict.",
+                stats: { allies: 60, axis: 30, neutral: 10 },
+                regions: {
+                    'reg-north-america': 'allied',
+                    'reg-united-kingdom': 'allied',
+                    'reg-western-europe': 'allied',
+                    'reg-central-europe': 'axis-central',
+                    'reg-eastern-europe': 'neutral',
+                    'reg-north-africa': 'axis-central',
+                    'reg-east-asia': 'neutral',
+                    'reg-japan': 'neutral',
+                    'reg-pacific-islands': 'neutral',
+                    'reg-australia': 'allied'
+                },
+                hotspots: [
+                    { name: "United States Mobilizes", x: 180, y: 180, index: 3, text: "Fresh American troops and massive material resources flow across the Atlantic." }
+                ]
+            },
+            1918: {
+                subtitle: "Victory & the German Collapse",
+                brief: "Germany launches a final desperate Spring Offensive, but fails to reach Paris before fresh American troops arrive. An Allied counter-offensive pierces German lines, triggering military mutiny and total Central Powers collapse. The Armistice is signed.",
+                stats: { allies: 70, axis: 10, neutral: 20 },
+                regions: {
+                    'reg-north-america': 'allied',
+                    'reg-united-kingdom': 'allied',
+                    'reg-western-europe': 'allied',
+                    'reg-central-europe': 'neutral',
+                    'reg-eastern-europe': 'neutral',
+                    'reg-north-africa': 'neutral',
+                    'reg-east-asia': 'neutral',
+                    'reg-japan': 'neutral',
+                    'reg-pacific-islands': 'neutral',
+                    'reg-australia': 'allied'
+                },
+                hotspots: [
+                    { name: "Meuse-Argonne Offensive", x: 425, y: 185, index: 4, text: "The largest American-led offensive of the war, breaking Germany's final defensive spine." },
+                    { name: "Signing of the Armistice", x: 395, y: 175, index: 4, text: "At 11 AM on November 11, the guns fell silent as Germany capitulated." }
+                ]
+            }
+        }
+    },
+    ww2: {
+        years: [1939, 1940, 1941, 1942, 1943, 1944, 1945],
+        factionNames: { allies: "Allied Powers", axis: "Axis Powers" },
+        states: {
+            1939: {
+                subtitle: "Blitzkrieg in the West",
+                brief: "Germany invades Poland using lightning war tactics. France and Britain declare war but remain defensive. The Soviet Union signs a non-aggression pact with Hitler and occupies eastern Poland.",
+                stats: { allies: 45, axis: 15, neutral: 40 },
+                regions: {
+                    'reg-north-america': 'neutral',
+                    'reg-united-kingdom': 'allied',
+                    'reg-western-europe': 'allied',
+                    'reg-central-europe': 'axis-central',
+                    'reg-eastern-europe': 'neutral',
+                    'reg-north-africa': 'neutral',
+                    'reg-east-asia': 'neutral',
+                    'reg-japan': 'neutral',
+                    'reg-pacific-islands': 'neutral',
+                    'reg-australia': 'allied'
+                },
+                hotspots: [
+                    { name: "Invasion of Poland", x: 480, y: 160, type: "theatre", theatre: "europe", tab: "military", category: "1939 — Invasion of Poland", index: 0, text: "German tank divisions rip through Poland, triggering declarations of war." }
+                ]
+            },
+            1940: {
+                subtitle: "The Fall of France",
+                brief: "Germany bypasses the Maginot Line, conquering Denmark, Norway, Belgium, and France in just six weeks. The British Army escapes at Dunkirk, leaving Britain to stand alone against German air raids in the Battle of Britain.",
+                stats: { allies: 25, axis: 45, neutral: 30 },
+                regions: {
+                    'reg-north-america': 'neutral',
+                    'reg-united-kingdom': 'allied',
+                    'reg-western-europe': 'axis-central',
+                    'reg-central-europe': 'axis-central',
+                    'reg-eastern-europe': 'neutral',
+                    'reg-north-africa': 'neutral',
+                    'reg-east-asia': 'neutral',
+                    'reg-japan': 'neutral',
+                    'reg-pacific-islands': 'neutral',
+                    'reg-australia': 'allied'
+                },
+                hotspots: [
+                    { name: "Evacuation of Dunkirk", x: 395, y: 175, type: "theatre", theatre: "europe", tab: "military", category: "1940 — The Fall of the West", index: 1, text: "Over 330,000 Allied soldiers are rescued from the beaches by a flotilla of small vessels." },
+                    { name: "Battle of Britain & The Blitz", x: 350, y: 140, type: "theatre", theatre: "europe", tab: "military", category: "1940 — The Fall of the West", index: 2, text: "The RAF defends British airspace from constant Luftwaffe strategic bombing." }
+                ]
+            },
+            1941: {
+                subtitle: "Barbarossa & Pearl Harbor",
+                brief: "Hitler breaks his pact with Russia, launching a massive three-pronged invasion of the USSR. In the Pacific, Japan attacks the US naval base at Pearl Harbor, drawing the United States fully into the global war.",
+                stats: { allies: 55, axis: 35, neutral: 10 },
+                regions: {
+                    'reg-north-america': 'allied',
+                    'reg-united-kingdom': 'allied',
+                    'reg-western-europe': 'axis-central',
+                    'reg-central-europe': 'axis-central',
+                    'reg-eastern-europe': 'allied',
+                    'reg-north-africa': 'axis-central',
+                    'reg-east-asia': 'allied',
+                    'reg-japan': 'axis-central',
+                    'reg-pacific-islands': 'axis-central',
+                    'reg-australia': 'allied'
+                },
+                hotspots: [
+                    { name: "Operation Barbarossa", x: 550, y: 150, type: "theatre", theatre: "europe", tab: "military", category: "1941-1942 — The Eastern Front Opens", index: 0, text: "German armies push deep into Soviet territories toward Moscow and Leningrad." },
+                    { name: "Attack on Pearl Harbor", x: 960, y: 320, type: "theatre", theatre: "pacific", tab: "military", category: "1941-1942 — Japan's Rapid Expansion", index: 0, text: "Japanese bombers stage a surprise strike, pulling the US into the world conflict." }
+                ]
+            },
+            1942: {
+                subtitle: "The Tide Turns",
+                brief: "The Allies halt the Axis advance in three major battles. The Soviets trap the German 6th Army at Stalingrad, the US Navy breaks Japanese carrier strength at Midway, and the British defeat Rommel at El Alamein.",
+                stats: { allies: 55, axis: 35, neutral: 10 },
+                regions: {
+                    'reg-north-america': 'allied',
+                    'reg-united-kingdom': 'allied',
+                    'reg-western-europe': 'axis-central',
+                    'reg-central-europe': 'axis-central',
+                    'reg-eastern-europe': 'allied',
+                    'reg-north-africa': 'axis-central',
+                    'reg-east-asia': 'allied',
+                    'reg-japan': 'axis-central',
+                    'reg-pacific-islands': 'axis-central',
+                    'reg-australia': 'allied'
+                },
+                hotspots: [
+                    { name: "Battle of Stalingrad", x: 620, y: 180, type: "theatre", theatre: "europe", tab: "military", category: "1941-1942 — The Eastern Front Opens", index: 2, text: "Brutal urban fighting ends in a crushing German defeat and strategic retreat." },
+                    { name: "Battle of Midway", x: 920, y: 310, type: "theatre", theatre: "pacific", tab: "military", category: "1942 — Turning the Tide", index: 1, text: "US naval forces ambush and sink four Japanese aircraft carriers, halting their advance." },
+                    { name: "Battle of the Coral Sea", x: 820, y: 440, type: "theatre", theatre: "pacific", tab: "military", category: "1942 — Turning the Tide", index: 0, text: "First carrier-vs-carrier fight where opposing ships never visually lay eyes on each other." }
+                ]
+            },
+            1943: {
+                subtitle: "Allied Initiative",
+                brief: "Soviets win the massive tank battle at Kursk. Allied forces secure North Africa, knocking Italy out of the war. In the Pacific, U.S. forces win a brutal campaign at Guadalcanal, beginning the 'Island Hopping' offensive.",
+                stats: { allies: 60, axis: 30, neutral: 10 },
+                regions: {
+                    'reg-north-america': 'allied',
+                    'reg-united-kingdom': 'allied',
+                    'reg-western-europe': 'axis-central',
+                    'reg-central-europe': 'axis-central',
+                    'reg-eastern-europe': 'allied',
+                    'reg-north-africa': 'allied',
+                    'reg-east-asia': 'allied',
+                    'reg-japan': 'axis-central',
+                    'reg-pacific-islands': 'axis-central',
+                    'reg-australia': 'allied'
+                },
+                hotspots: [
+                    { name: "Battle of Kursk", x: 580, y: 160, type: "theatre", theatre: "europe", tab: "military", category: "1943-1944 — Allied Counter-Offensives", index: 0, text: "The largest tank battle in history breaks Germany's final offensive power in the East." },
+                    { name: "Guadalcanal Campaign", x: 840, y: 420, type: "theatre", theatre: "pacific", tab: "military", category: "1943-1944 — Island Hopping", index: 0, text: "A six-month grueling jungle battle marks the first major ground offensive victory." }
+                ]
+            },
+            1944: {
+                subtitle: "The Liberation Begins",
+                brief: "Allied forces stage D-Day, the largest amphibious landing in Normandy, opening the Western Front. Paris is liberated. In the Pacific, the Japanese navy is destroyed at Leyte Gulf, leading to the liberation of the Philippines.",
+                stats: { allies: 70, axis: 20, neutral: 10 },
+                regions: {
+                    'reg-north-america': 'allied',
+                    'reg-united-kingdom': 'allied',
+                    'reg-western-europe': 'allied',
+                    'reg-central-europe': 'axis-central',
+                    'reg-eastern-europe': 'allied',
+                    'reg-north-africa': 'allied',
+                    'reg-east-asia': 'allied',
+                    'reg-japan': 'axis-central',
+                    'reg-pacific-islands': 'allied',
+                    'reg-australia': 'allied'
+                },
+                hotspots: [
+                    { name: "D-Day Normandy Landings", x: 385, y: 185, type: "theatre", theatre: "europe", tab: "military", category: "1943-1944 — Allied Counter-Offensives", index: 1, text: "Operation Overlord breaches Germany's Atlantic Wall in northern France." },
+                    { name: "Battle of Leyte Gulf", x: 770, y: 340, type: "theatre", theatre: "pacific", tab: "military", category: "1943-1944 — Island Hopping", index: 2, text: "The largest naval engagement in history destroys Japan's naval capability." },
+                    { name: "Liberation of Paris", x: 390, y: 195, type: "theatre", theatre: "europe", tab: "military", category: "1943-1944 — Allied Counter-Offensives", index: 2, text: "French Resistance and Allied armor force the surrender of the Paris garrison." }
+                ]
+            },
+            1945: {
+                subtitle: "Final Reckoning & Victory",
+                brief: "Soviet forces storm Berlin, leading to Germany's unconditional surrender (VE Day). In the Pacific, U.S. marines conquer Okinawa. The United States drops two atomic bombs on Hiroshima and Nagasaki, forcing Japan to surrender (VJ Day).",
+                stats: { allies: 85, axis: 5, neutral: 10 },
+                regions: {
+                    'reg-north-america': 'allied',
+                    'reg-united-kingdom': 'allied',
+                    'reg-western-europe': 'allied',
+                    'reg-central-europe': 'allied',
+                    'reg-eastern-europe': 'allied',
+                    'reg-north-africa': 'allied',
+                    'reg-east-asia': 'allied',
+                    'reg-japan': 'allied',
+                    'reg-pacific-islands': 'allied',
+                    'reg-australia': 'allied'
+                },
+                hotspots: [
+                    { name: "Battle of Berlin", x: 460, y: 170, type: "theatre", theatre: "europe", tab: "military", category: "1945 — The Final Collapse", index: 1, text: "Soviet forces storm and raise the Red Flag over the Reichstag, ending Nazi rule." },
+                    { name: "Battle of Okinawa", x: 810, y: 260, type: "theatre", theatre: "pacific", tab: "military", category: "1945 — The Final Struggles", index: 1, text: "A massive attritional island fight with widespread Kamikaze suicide operations." },
+                    { name: "Atomic Bombings", x: 875, y: 180, type: "theatre", theatre: "pacific", tab: "military", category: "1945 — The Final Struggles", index: 2, text: "First deployment of nuclear weapons destroys Hiroshima and Nagasaki, forcing peace." }
+                ]
+            }
+        }
+    }
+};
+
+// Open Campaign Map View Screen
+function openCampaignMapView() {
+    const warKey = window.currentWar || 'ww1';
+    
+    // Set Slider attributes dynamically
+    const slider = document.getElementById('campaign-year-slider');
+    const data = campaignMapData[warKey];
+    const years = data.years;
+    
+    slider.min = Math.min(...years);
+    slider.max = Math.max(...years);
+    slider.value = Math.min(...years);
+    
+    // Track exploration - registers the action in local storage!
+    trackEventOpen('campaign_map_' + warKey);
+    
+    // Update war room colors and theme classes dynamically
+    const view = document.getElementById('campaign-map-view');
+    view.className = '';
+    view.classList.add(warKey + '-theme');
+    
+    // Populate Slider Year tick markings
+    const ticksContainer = document.getElementById('slider-ticks');
+    ticksContainer.innerHTML = years.map(y => `
+        <span class="tick-mark" id="tick-${y}" onclick="updateMapYear(${y})">${y}</span>
+    `).join('');
+    
+    // Update faction labels
+    document.getElementById('faction-allies-label').innerText = data.factionNames.allies;
+    document.getElementById('faction-axis-label').innerText = data.factionNames.axis;
+    
+    // Slide show and display overlay
+    view.classList.remove('hidden');
+    document.body.style.overflow = 'hidden'; // Lock background scrolling
+    
+    // Bind region mouse hovers for dynamic tooltips
+    initRegionHovers();
+    
+    // Draw initial year
+    updateMapYear(Math.min(...years));
+}
+
+// Close Campaign Map View Screen
+function closeCampaignMapView() {
+    document.getElementById('campaign-map-view').classList.add('hidden');
+    document.body.style.overflow = 'auto'; // Restore scrolling
+}
+
+// Slider drag listener
+function handleMapSliderInput(yearVal) {
+    updateMapYear(parseInt(yearVal, 10));
+}
+
+// Update Map State dynamically based on Selected Year
+function updateMapYear(year) {
+    const warKey = window.currentWar || 'ww1';
+    const data = campaignMapData[warKey];
+    const state = data.states[year];
+    if (!state) return;
+    
+    // Update slider position handle
+    document.getElementById('campaign-year-slider').value = year;
+    
+    // Update tick styles
+    const ticks = document.querySelectorAll('.tick-mark');
+    ticks.forEach(t => t.classList.remove('active'));
+    const activeTick = document.getElementById('tick-' + year);
+    if (activeTick) activeTick.classList.add('active');
+    
+    // Update Operations Deck details text
+    document.getElementById('op-year-title').innerText = year;
+    document.getElementById('op-year-subtitle').innerText = state.subtitle;
+    document.getElementById('op-brief-text').innerHTML = state.brief;
+    
+    // Update dynamic faction balance stats and fills
+    document.getElementById('faction-allies-pct').innerText = state.stats.allies + '%';
+    document.getElementById('faction-allies-fill').style.width = state.stats.allies + '%';
+    
+    document.getElementById('faction-axis-pct').innerText = state.stats.axis + '%';
+    document.getElementById('faction-axis-fill').style.width = state.stats.axis + '%';
+    
+    document.getElementById('faction-neutral-pct').innerText = state.stats.neutral + '%';
+    document.getElementById('faction-neutral-fill').style.width = state.stats.neutral + '%';
+    
+    // Shading the SVG map paths based on alignment states
+    const svgRegions = document.querySelectorAll('.map-region');
+    svgRegions.forEach(reg => {
+        reg.className.baseVal = 'map-region'; // Clear classes
+        const alignment = state.regions[reg.id];
+        if (alignment === 'allied') {
+            reg.classList.add('region-allied');
+        } else if (alignment === 'axis-central') {
+            reg.classList.add('region-axis-central');
+        } else if (alignment === 'neutral') {
+            reg.classList.add('region-neutral');
+        }
+    });
+    
+    // Render dynamic active battle hotspots on SVG (Core dots + pulsing radars)
+    const hotspotsGroup = document.getElementById('map-hotspots-group');
+    let hotspotsSVG = '';
+    
+    state.hotspots.forEach((spot, idx) => {
+        hotspotsSVG += `
+            <g style="cursor: pointer;" onclick="handleHotspotClick(${year}, ${idx})">
+                <!-- Pulsating Radar Ring -->
+                <circle cx="${spot.x}" cy="${spot.y}" r="12" class="hotspot-radar" />
+                <!-- Core Dot -->
+                <circle cx="${spot.x}" cy="${spot.y}" r="6" class="hotspot-marker" id="spot-${year}-${idx}" />
+                <title>${spot.name}: ${spot.text}</title>
+            </g>
+        `;
+    });
+    hotspotsGroup.innerHTML = hotspotsSVG;
+    
+    // Render clickable Operations Deck hotspots list buttons
+    const hotspotsList = document.getElementById('op-hotspots-list');
+    if (state.hotspots.length > 0) {
+        hotspotsList.innerHTML = state.hotspots.map((spot, idx) => `
+            <button class="op-hotspot-btn" onclick="handleHotspotClick(${year}, ${idx})">
+                <span>⚔️ <strong>${spot.name}</strong></span>
+                <span class="op-hotspot-arrow">Explore Archive ➔</span>
+            </button>
+        `).join('');
+    } else {
+        hotspotsList.innerHTML = `<p style="font-size: 0.85rem; color: var(--text-secondary); font-style: italic;">No active frontlines recorded for this sector in ${year}.</p>`;
+    }
+}
+
+// Dynamic Region Hovers Tooltip mapping
+function initRegionHovers() {
+    const tooltip = document.getElementById('map-tooltip');
+    const regions = document.querySelectorAll('.map-region');
+    const regionsNames = {
+        'reg-north-america': 'North America',
+        'reg-united-kingdom': 'United Kingdom',
+        'reg-western-europe': 'Western Europe',
+        'reg-central-europe': 'Central Europe',
+        'reg-eastern-europe': 'Eastern Europe & USSR',
+        'reg-north-africa': 'North Africa & Middle East',
+        'reg-east-asia': 'East Asia & China',
+        'reg-japan': 'Japanese Empire',
+        'reg-pacific-islands': 'Pacific Theatres',
+        'reg-australia': 'Southeast Asia & Australia'
+    };
+    
+    regions.forEach(reg => {
+        reg.addEventListener('mouseenter', () => {
+            const warKey = window.currentWar || 'ww1';
+            const year = parseInt(document.getElementById('campaign-year-slider').value, 10);
+            const state = campaignMapData[warKey].states[year];
+            const alignmentCode = state ? state.regions[reg.id] : 'neutral';
+            
+            let alignmentLabel = 'Neutral';
+            if (alignmentCode === 'allied') {
+                alignmentLabel = campaignMapData[warKey].factionNames.allies;
+            } else if (alignmentCode === 'axis-central') {
+                alignmentLabel = campaignMapData[warKey].factionNames.axis;
+            }
+            
+            tooltip.innerHTML = `<strong>${regionsNames[reg.id] || 'Region'}</strong><br><span style="color: var(--accent-color); font-size: 0.8rem; font-weight: bold;">Control: ${alignmentLabel}</span>`;
+            tooltip.style.opacity = '1';
+        });
+        
+        reg.addEventListener('mouseleave', () => {
+            tooltip.style.opacity = '0';
+        });
+        
+        reg.addEventListener('mousemove', (e) => {
+            const rect = document.querySelector('.map-arena').getBoundingClientRect();
+            const posX = e.clientX - rect.left + 15;
+            const posY = e.clientY - rect.top + 15;
+            tooltip.style.left = posX + 'px';
+            tooltip.style.top = posY + 'px';
+        });
+    });
+}
+
+// Handle dynamic Hotspot Clicking and link to unified modal structures
+function handleHotspotClick(year, index) {
+    const warKey = window.currentWar || 'ww1';
+    const spot = campaignMapData[warKey].states[year].hotspots[index];
+    if (!spot) return;
+    
+    if (warKey === 'ww1') {
+        // Direct WWI timeline modals
+        openTimelineModal(spot.index);
+    } else {
+        // WWII Theatre event modals
+        window.currentTheatreKey = spot.theatre;
+        window.currentTheatreTab = spot.tab;
+        
+        openTheatreEventModal(spot.category, spot.index);
+    }
+}
+
+// Global Keyboard listener for closing active modals/overlays with 'Escape'
+window.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        // 1. Lightbox modal (highest priority z-index)
+        const lightbox = document.getElementById('lightbox-modal');
+        if (lightbox && !lightbox.classList.contains('hidden')) {
+            closeLightbox();
+            return;
+        }
+        
+        // 2. Main Modal
+        const mainModal = document.getElementById('main-modal');
+        if (mainModal && !mainModal.classList.contains('hidden')) {
+            closeMainModal();
+            return;
+        }
+        
+        // 3. WWII Theatre Event Modal
+        const theatreEventModal = document.getElementById('theatre-event-modal');
+        if (theatreEventModal && !theatreEventModal.classList.contains('hidden')) {
+            closeTheatreEventModal();
+            return;
+        }
+        
+        // 4. History Challenge Quiz Modal
+        const quizModal = document.getElementById('quiz-modal');
+        if (quizModal && !quizModal.classList.contains('hidden')) {
+            closeQuizModal();
+            return;
+        }
+        
+        // 5. About Project Modal
+        const aboutModal = document.getElementById('about-modal');
+        if (aboutModal && !aboutModal.classList.contains('hidden')) {
+            closeAboutModal();
+            return;
+        }
+        
+        // 6. Interactive Campaign Map Overlay
+        const campaignMap = document.getElementById('campaign-map-view');
+        if (campaignMap && !campaignMap.classList.contains('hidden')) {
+            closeCampaignMapView();
+            return;
+        }
+        
+        // 7. Figure Details View
+        const figuresView = document.getElementById('figures-view');
+        if (figuresView && !figuresView.classList.contains('hidden')) {
+            closeFiguresView();
+            return;
+        }
+        
+        // 8. WWII Theatre Details View
+        const theatreDetails = document.getElementById('theatre-details');
+        if (theatreDetails && !theatreDetails.classList.contains('hidden')) {
+            closeTheatreDetails();
+            return;
+        }
+        
+        // 9. WWII Theatre Split screen
+        const theatreSplit = document.getElementById('theatre-split');
+        if (theatreSplit && !theatreSplit.classList.contains('hidden')) {
+            closeTheatreSplit();
+            return;
+        }
+        
+        // 10. Alliances Split Screen
+        const alliancesSplit = document.getElementById('alliances-split');
+        if (alliancesSplit && !alliancesSplit.classList.contains('hidden')) {
+            closeAlliancesSplit();
+            return;
+        }
+    }
+});
+
 
 
